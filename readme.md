@@ -1,5 +1,10 @@
 # Designing Algorithmic Media
 
+Investigate whether increase of polarization 
+
+## Dataset
+ 
+Initial data set found on the [World Values Survey joint 2017](https://www.worldvaluessurvey.org/WVSEVSjoint2017.jsp) 
 
 ## Recommended Installation steps
 
