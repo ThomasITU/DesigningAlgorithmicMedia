@@ -8,7 +8,7 @@ Initial data set found on the [World Values Survey joint 2017](https://www.world
 
 See handbook for feature mappings [variable correspondece.xlsx](data/Handbooks/EVS_WVS_Joint_v5.0_VariableCorrespondence.xlsx)
 
-## Recommended Installation steps
+## Recommended Installation Instructions
 
 Ensure python and pip is installed then create a virtual environment to keep dependencies clean.
 
@@ -18,5 +18,8 @@ source ~/DesigningAlgorithmicMedia/bin/activate
 pip install -r requirements.txt
 ```
 
+From repository root install git pre-commit hook by running script the script below - To avoid cluttering git history with meta data changes in jupyter notebooks
 
-
+```zsh
+sh ./scripts/install-hooks.sh 
+```
