@@ -2,6 +2,6 @@
 
 # Run nbstripout on all .ipynb files
 for notebook in $(git diff --cached --name-only | grep '\.ipynb$'); do
-    nbstripout "$notebook"
+    nbstripout --keep-output "$notebook"
     git add "$notebook"
 done

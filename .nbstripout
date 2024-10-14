@@ -1,0 +1,11 @@
+{
+    "metadata": {
+        "kernelspec": true,
+        "language_info": true,
+        "widgets": false
+    },
+    "outputs": true,
+    "cells": {
+        "metadata": false
+    }
+}
