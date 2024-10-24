@@ -1,3 +1,5 @@
+import os
+
 class UtilityFunctions:
     
     @staticmethod
@@ -18,14 +20,19 @@ class UtilityFunctions:
         for coln in non_numeric_columns:
             print(f"{coln}: {df[coln].unique()}")
 
+
     @staticmethod
     def save_dataframe(df, filename):
-        processed_path = 'data/processed/'
+        processed_path = './../data/processed/'
         path = processed_path+filename + '.csv'
         df.to_csv(path, index=False)
 
         return path
     
+    @staticmethod
+    def get_csv_files_from_folder(folder_path:str = './../data/raw/'):
+        csv_files = [folder_path+f for f in os.listdir(folder_path) if f.endswith('csv') and os.path.isfile(os.path.join(folder_path, f))]
+        return csv_files
     @staticmethod
     # Find columns with fewer than `threshold` unique values
     def few_unique_values_columns(df, threshold):
