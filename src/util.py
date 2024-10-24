@@ -1,31 +1,25 @@
 import os
 
 class UtilityFunctions:
-    
-    @staticmethod
-    # drop columns if not already dropped
-    def drop_columns(df, columns_to_drop):
-        # Drop columns only if they exist in the DataFrame
-        existing_columns_to_drop = [col for col in columns_to_drop if col in df.columns]
 
-        # Drop the existing columns
-        df.drop(columns=existing_columns_to_drop, inplace=True)
-        return df
+    @staticmethod
+    def get_non_numeric_columns(dataframe):
+        non_numeric_columns = dataframe.select_dtypes(exclude=['number']).columns.tolist()
+        return non_numeric_columns
     
     @staticmethod
     # print non-numeric columns
-    def print_non_numeric_columns(df):
-        non_numeric_columns = df.select_dtypes(exclude=['number']).columns.tolist()
-
+    def print_non_numeric_columns(dataframe):
+        non_numeric_columns = UtilityFunctions.get_non_numeric_columns(dataframe)
         for coln in non_numeric_columns:
-            print(f"{coln}: {df[coln].unique()}")
+            print(f"{coln}: {dataframe[coln].unique()}")
 
 
     @staticmethod
-    def save_dataframe(df, filename):
+    def save_dataframe(dataframe, filename):
         processed_path = './../data/processed/'
         path = processed_path+filename + '.csv'
-        df.to_csv(path, index=False)
+        dataframe.to_csv(path, index=False)
 
         return path
     
