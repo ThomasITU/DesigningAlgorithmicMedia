@@ -1,12 +1,14 @@
 # Designing Algorithmic Media
 
-Investigate whether increase of polarization 
+Investigate whether increase of polarization and a narrowing skew of opionions is correlated
 
 ## Dataset
- 
-Initial data set found on the [World Values Survey joint 2017](https://www.worldvaluessurvey.org/WVSEVSjoint2017.jsp) 
+
+Initial data set found on the [World Values Survey joint 2017](https://www.worldvaluessurvey.org/WVSEVSjoint2017.jsp)
 
 See handbook for feature mappings [variable correspondece.xlsx](data/Handbooks/EVS_WVS_Joint_v5.0_VariableCorrespondence.xlsx)
+
+We're focused on investigating USA, Germany, Norway and Denmark
 
 ## Recommended Installation Instructions
 

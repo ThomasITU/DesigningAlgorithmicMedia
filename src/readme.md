@@ -14,3 +14,6 @@
 
   * [ ] filter features
   * [X] save csv in processed folder by, country and year
+* [ ] Consider different countries for diversity, in europe, Since Norway, Denmark and Germany is quite similar
+
+  * [ ] Could be Italy, France, Poland this might also have quite strong polarization
