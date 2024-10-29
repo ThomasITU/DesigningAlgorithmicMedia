@@ -9,6 +9,7 @@
 */.ipynb_checkpoints/*
 
 # CSV files
+data/processed/
 data/raw/
 
 # IPython
