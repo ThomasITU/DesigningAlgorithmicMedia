@@ -3,6 +3,9 @@ from sklearn.decomposition import PCA
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
+from sklearn.cluster import KMeans as km
+import numpy as np
+
 
 class Analysis:
     
@@ -52,4 +55,31 @@ class Analysis:
     def columns(n_components):
         return [f'PC{i}' for i in range(1, n_components+1)]
 
-    
+    @staticmethod
+    def plot_kmeans(n_clusters, dataframe, labels, dataset_name):
+        numpy_array = dataframe.to_numpy()
+
+        # Plot clusters
+        cmap = plt.get_cmap('viridis')  # You can choose any colormap you prefer
+
+        # Map cluster labels to colors
+        colors = cmap(np.linspace(0, 1, max(labels) + 1))
+
+
+        # Plot clusters
+        plt.figure(figsize=(12, 8))
+        for i in range(n_clusters):
+            cluster_points = numpy_array[labels == i]
+            plt.scatter(cluster_points[:, 0], cluster_points[:, 1],
+                        label=f'Cluster {i+1}', alpha=0.5, color=colors[i])
+
+        # Plot centroids
+        # centroids = kmeans.cluster_centers_
+        # plt.scatter(centroids[:, 0], centroids[:, 1], s=300, marker='*', c='red', label='Centroids')
+
+        # Add labels and legend
+        plt.xlabel('First Principal Component')
+        plt.ylabel('Second Principal Component')
+        plt.title(f'K-means Clustering for {dataset_name} : ({n_clusters} clusters)')
+        plt.legend()
+        plt.show()
