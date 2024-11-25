@@ -19,10 +19,10 @@
 
 * [ ] ResIN
 
-  * [ ] Create Graph
+  * [X] Create Graph
   * [ ] Find initial set of Polarising questions 
   * [ ] Connect questions in the graph
-  * [ ] compute binary variable for the rows with most strongly held beliefs (1-10) select 1,2 and 9-10 as agree or oppose
+  * [X] compute binary variable for the rows with most strongly held beliefs (1-10) select 1,2 and 9-10 as agree or oppose
   * [ ] Visualise the graph 
   * [ ] Ensure that the distance is proportional to weight
   * [ ] Color based on left leaning oppinions?
