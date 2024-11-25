@@ -5,6 +5,8 @@ import pandas as pd
 from sklearn.metrics import matthews_corrcoef
 
 class ResponseItemNetwork:
+
+    WEIGHT_MULTIPLIER = 50
     def __init__(self, df):
         self.df = self.binarize_df(df)
         self.nodes = list(self.df.columns)
@@ -12,12 +14,22 @@ class ResponseItemNetwork:
         self.build_graph()
 
     def build_graph(self):
+        original_node = None
+        duplicate_node = None
         for i in range(len(self.nodes)):
             for j in range(i + 1, len(self.nodes)):
                 node_a, node_b = self.nodes[i], self.nodes[j]
                 correlation = self.calculate_correlation(node_a, node_b)
                 if correlation > 0:  # Only add positive associations from the paper
-                    self.add_edge(node_a, node_b, correlation)
+                    # print(f"Adding edge between {node_a} and {node_b} with correlation {correlation}")
+                    self.add_edge(node_a, node_b, correlation * self.WEIGHT_MULTIPLIER)
+                    if duplicate_node is None:
+                        duplicate_node = node_a
+                        original_node = node_a
+        self.nodes.append(duplicate_node+"_dup")
+        correlation_dub = self.calculate_correlation(original_node, duplicate_node)
+        self.add_edge(original_node, duplicate_node+"_dup", correlation_dub * self.WEIGHT_MULTIPLIER)
+        print(f"Adding edge between {original_node} and {duplicate_node}_dup with correlation {correlation_dub}")
 
     def binarize_df(self, df):
         # Create an empty DataFrame to store results
@@ -61,7 +73,7 @@ class ResponseItemNetwork:
 
     
     @staticmethod
-    def visualize_graph(ResIN, question_mapping, node_partisan_data, show_edges):
+    def visualize_graph(ResIN, question_mapping, node_partisan_data, show_edges, weight_multiplier=50):
         G = nx.Graph()
 
         for node in ResIN.nodes:
@@ -82,7 +94,7 @@ class ResponseItemNetwork:
 
         edges = G.edges()
         weights = [G[u][v]['weight'] for u, v in edges]
-        nx.draw_networkx_edges(G, pos, width=[w for w in weights], edge_color='gray')
+        nx.draw_networkx_edges(G, pos, width=[w/weight_multiplier for w in weights], edge_color='gray')
 
         if show_edges:
             edge_labels = {(u, v): f"{w:.2f}" for (u, v, w) in G.edges(data='weight')}
