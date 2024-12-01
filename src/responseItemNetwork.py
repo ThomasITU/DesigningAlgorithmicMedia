@@ -7,9 +7,10 @@ from sklearn.decomposition import PCA
 
 class ResponseItemNetwork:
 
-    def __init__(self, df: pd.DataFrame, question_mapping: dict[str, tuple[str, int]]):
+    POLITCAL_BELIEF_COLUMN = 'resin_political_beliefs'
+    def __init__(self, df: pd.DataFrame, question_mapping: dict[str, tuple[str, int]], political_belief_column: str | None):
         self.question_mapping = question_mapping # {question key (X99): [question name, range of possible_answers (int)}
-        self.df = self.binarize_df(df)
+        self.df = self.binarize_df(df, political_belief_column)
         self.nodes = list(self.df.columns)
         self.edges = {}
         self.build_graph()
@@ -22,44 +23,46 @@ class ResponseItemNetwork:
             for j in range(i + 1, len(self.nodes)):
                 node_a, node_b = self.nodes[i], self.nodes[j]
                 
-                # Skip nodes that are the same question (using the first part of the name before the '_')
-                if node_a.split('_')[0] == node_b.split('_')[0]:
+                # Skip nodes that we don't want to process multiple times adds side effects
+                if self.skip_seen_nodes(seen_nodes, node_a, node_b): 
                     continue
-
-                # Skip if we've already processed this pair
-                if (node_a, node_b) in seen_nodes or (node_b, node_a) in seen_nodes:
-                    continue
-
-                # Track the pair to avoid redundant processing
-                seen_nodes.add((node_a, node_b))
 
                 # Calculate correlation between node_a and node_b
-                try:
-                    correlation = self.calculate_correlation(node_a, node_b)
-                    if correlation > 0:  # Only add positive associations from the paper
-                        print(f"Adding edge between {node_a} and {node_b} with correlation {correlation}")
-                        self.add_edge(node_a, node_b, correlation)
-                except ValueError as e:
-                    print(f"Error calculating correlation between {node_a} and {node_b}: {e}")
+                correlation = self.calculate_correlation(node_a, node_b)
+                if correlation > 0:  # Only add positive associations from the paper
+                    self.add_edge(node_a, node_b, correlation)
 
+    # helper method to skip nodes that we don't want to process multiple times
+    def skip_seen_nodes(self, seen_nodes: set, node_a: str, node_b: str):
+            seen = False
 
+            # Skip political belief columns
+            if node_a == self.POLITCAL_BELIEF_COLUMN or node_b == self.POLITCAL_BELIEF_COLUMN:
+                seen = True
 
-    def binarize_df(self, df):
+            # Skip nodes that are the same question (using the first part of the name before the '_')
+            if node_a.split('_')[0] == node_b.split('_')[0]:
+                seen = True
+
+            # Skip if we've already processed this pair
+            if (node_a, node_b) in seen_nodes or (node_b, node_a) in seen_nodes:
+                seen = True
+            
+
+            if not seen:
+                seen_nodes.add((node_a, node_b)) 
+            return seen
+
+    def binarize_df(self, df, political_belief_column):
         # Create an empty DataFrame to store results
         binarized = pd.DataFrame(index=df.index)
+        if political_belief_column:
+            binarized[self.POLITCAL_BELIEF_COLUMN] = df[political_belief_column]
 
         for key, (question, possible_answers) in self.question_mapping.items():
-            # Create a single binary row per respondent for all possible answers
-            binarized_answers = pd.get_dummies(df[key], prefix=question)
-            
-            # Add missing possible answers as columns with all zeros (if necessary)
             for answer in range(1, possible_answers + 1):
                 column_name = f"{question}_{answer}"
-                if column_name not in binarized_answers:
-                    binarized_answers[column_name] = 0
-
-            # Concatenate the binarized answers for this question to the result
-            binarized = pd.concat([binarized, binarized_answers], axis=1)
+                binarized[column_name] = (df[key] == answer).astype(int)
 
         return binarized
 
@@ -68,7 +71,6 @@ class ResponseItemNetwork:
         edge_id = f"{source}_{target}"
         self.edges[edge_id] = {'source': source, 'target': target, 'weight': weight}
 
-    
     def calculate_correlation(self, node_a, node_b):
         # Filter rows where both node_a and node_b have non-negative values
         filtered_df = self.df[(self.df[node_a] >= 0) & (self.df[node_b] >= 0)]
@@ -82,26 +84,35 @@ class ResponseItemNetwork:
         # Calculate and return the correlation
         return matthews_corrcoef(a, b)
 
-    
-    @staticmethod
-    def visualize_graph(ResIN, question_mapping, node_partisan_data, show_edges, weight_multiplier=10):
-        pca = PCA(n_components=2)
+    def visualize_graph(self, weight_multiplier=10):
         G = nx.Graph()
+        
+        # Create a list of colors for each node based on the mean political belief
+        node_colors = []
+        partisan_column = self.df[self.POLITCAL_BELIEF_COLUMN] if (self.POLITCAL_BELIEF_COLUMN in self.df.columns) else pd.Series()
 
-        for node in ResIN.nodes:
-            if question_mapping is None or node not in question_mapping:
-                G.add_node(node, label=node)
+        for node in self.nodes:
+            if node == self.POLITCAL_BELIEF_COLUMN:
                 continue
-            label = question_mapping.get(node, node)
-            # partisan_score = node_partisan_data.get(node, 4)  # Default to a neutral score if absent
-            G.add_node(node, label=label) #, partisan=partisan_score)
 
+            # Add the node to the graph
+            G.add_node(node, label=node)
 
-        for edge in ResIN.edges.values():
+            # Calculate the political mean belief in order to color each question node
+            if not partisan_column.empty:
+                mean_belief = self.get_mean_political_belief(node, partisan_column)
+                node_colors.append(self.political_belief_to_color(mean_belief))
+
+        # Add edges to the graph
+        for edge in self.edges.values():
             G.add_edge(edge['source'], edge['target'], weight=edge['weight'])
 
+        # Calculate the positions of the nodes using force-directed layout
         pos = nx.spring_layout(G, iterations=5000)
-        positions = ResponseItemNetwork.extract_positions(pos)
+
+        # rotate and scale the positions
+        # positions = self.extract_positions(pos)
+        # pca = PCA(n_components=2)
         # pca.fit(positions)
         # x_pca = pca.transform(positions)
         # xx = x_pca[:, 0]
@@ -109,34 +120,40 @@ class ResponseItemNetwork:
 
         # mm = min(xx)*1.1
         # MM = max(xx)*1.1
-        nx.draw_networkx_nodes(G, pos, node_size=30, cmap=plt.cm.coolwarm)# node_color=colors
 
-        node_labels = {node: data['label'] for node, data in G.nodes(data=True)}
-        nx.draw_networkx_labels(G, pos, labels=node_labels, font_size=5)
+        # draw nodes
+        node_labels = {node: data.get('label', node) for node, data in G.nodes(data=True)}
+        nx.draw_networkx_nodes(G, pos, node_size=300, node_color=node_colors)
+        nx.draw_networkx_labels(G, pos, labels=node_labels, font_size=8)
 
-
+        # draw edges
         edges = G.edges()
         weights = [G[u][v]['weight'] for u, v in edges]
-        nx.draw_networkx_edges(G, pos, width=[w/weight_multiplier for w in weights], edge_color='gray')
-
-        if show_edges:
-            edge_labels = {(u, v): f"{w:.2f}" for (u, v, w) in G.edges(data='weight')}
-            nx.draw_networkx_edge_labels(G, pos, edge_labels=edge_labels, font_size=6)
-
-
-        sm = plt.cm.ScalarMappable(cmap=plt.cm.coolwarm, norm=plt.Normalize(vmin=1, vmax=10))
-        sm.set_array([])
-        # plt.colorbar(sm, label="Partisan Leaning")
+        nx.draw_networkx_edges(G, pos, width=[w * weight_multiplier for w in weights], edge_color='gray')
 
         plt.title("Response Item Network")
         # plt.axis('off')
         # plt.xlim([mm, MM])
         # plt.ylim([mm, MM])
-
         plt.show()
 
-    @staticmethod
-    def extract_positions(pos):
+    def get_mean_political_belief(self, feature_node, political_beliefs: pd.Series):
+        opinion = self.df[feature_node]
+        mean_belief = np.mean(political_beliefs[opinion > 0])  # Avoid division by 0 for missing answers
+        return mean_belief
+
+   # Map each question's political belief mean to a color
+    def political_belief_to_color(self, mean_belief, belief_scale=9):
+        # Normalize the mean political belief to [0, 1] to create a color gradient
+        norm_belief = (mean_belief - 1) / belief_scale  # Normalize to [0, 1] (1 = left, 10 = right)
+        norm_belief = np.clip(norm_belief, 0, 1)
+
+        # Use a colormap (coolwarm from blue to red) to create the final color
+        cmap = plt.get_cmap("coolwarm")
+        return cmap(norm_belief)  # Map the normalized value to the color
+
+
+    def extract_positions(self, pos):
         # based on the original Respondent network 
         # https://github.com/just-a-normal-dino/AS22_analysis_RESIN/blob/main/graded_model_full.ipynb
         pos2 = [[],[]]
