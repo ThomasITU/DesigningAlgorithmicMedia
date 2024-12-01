@@ -16,54 +16,41 @@ class ResponseItemNetwork:
         self.build_graph()
 
     def build_graph(self):
-        # Create a unique list of nodes (ensure no duplicates)
-        seen_nodes = set()  # To track questions we already processed
+        seen_nodes = set()
 
-        for i in range(len(self.nodes)):
-            for j in range(i + 1, len(self.nodes)):
-                node_a, node_b = self.nodes[i], self.nodes[j]
-                
-                # Skip nodes that we don't want to process multiple times adds side effects
-                if self.skip_seen_nodes(seen_nodes, node_a, node_b): 
+        for i, node_a in enumerate(self.nodes):
+            for node_b in self.nodes[i + 1:]:
+                # Skip nodes we don't want to process multiple times
+                if self.skip_seen_nodes(seen_nodes, node_a, node_b):
                     continue
 
-                # Calculate correlation between node_a and node_b
+                # Calculate correlation and add edge if positive based on the paper
                 correlation = self.calculate_correlation(node_a, node_b)
-                if correlation > 0:  # Only add positive associations from the paper
+                if correlation > 0:
                     self.add_edge(node_a, node_b, correlation)
 
     # helper method to skip nodes that we don't want to process multiple times
     def skip_seen_nodes(self, seen_nodes: set, node_a: str, node_b: str):
-            seen = False
-
-            # Skip political belief columns
-            if node_a == self.POLITCAL_BELIEF_COLUMN or node_b == self.POLITCAL_BELIEF_COLUMN:
-                seen = True
-
-            # Skip nodes that are the same question (using the first part of the name before the '_')
-            if node_a.split('_')[0] == node_b.split('_')[0]:
-                seen = True
-
+            # Skip political belief columns and nodes that are the same question
+            if node_a == self.POLITCAL_BELIEF_COLUMN or node_b == self.POLITCAL_BELIEF_COLUMN or node_a.split('_')[0] == node_b.split('_')[0]:
+                return True
+            
             # Skip if we've already processed this pair
             if (node_a, node_b) in seen_nodes or (node_b, node_a) in seen_nodes:
-                seen = True
+                return True
             
-
-            if not seen:
-                seen_nodes.add((node_a, node_b)) 
-            return seen
+            seen_nodes.add((node_a, node_b)) 
+            return False
 
     def binarize_df(self, df, political_belief_column):
-        # Create an empty DataFrame to store results
         binarized = pd.DataFrame(index=df.index)
         if political_belief_column:
-            binarized[self.POLITCAL_BELIEF_COLUMN] = df[political_belief_column]
+            binarized[self.POLITCAL_BELIEF_COLUMN] = df[political_belief_column] # Add political beliefs to the binarized dataframe
 
-        for key, (question, possible_answers) in self.question_mapping.items():
-            for answer in range(1, possible_answers + 1):
-                column_name = f"{question}_{answer}"
-                binarized[column_name] = (df[key] == answer).astype(int)
-
+        for key, (question, belief_spectrum) in self.question_mapping.items(): 
+            for answer in range(1, belief_spectrum + 1): # iterate over the possible range of answers to a question
+                column_name = f"{question}_{answer}" # Create a column name for the belief e.g. belief_1, belief_2, etc 
+                binarized[column_name] = (df[key] == answer).astype(int) # Add a 1 if the belief is held at the "answer" level , otherwise 0
         return binarized
 
     def add_edge(self, source, target, weight=0):
@@ -74,15 +61,13 @@ class ResponseItemNetwork:
     def calculate_correlation(self, node_a, node_b):
         # Filter rows where both node_a and node_b have non-negative values
         filtered_df = self.df[(self.df[node_a] >= 0) & (self.df[node_b] >= 0)]
-        if len(filtered_df) == 0:
-            return 0
-        
+
         # Create binary arrays indicating presence based on the filtered rows
         a = np.array([int(val > 0) for val in filtered_df[node_a]])
         b = np.array([int(val > 0) for val in filtered_df[node_b]])
 
-        # Calculate and return the correlation
-        return matthews_corrcoef(a, b)
+        return matthews_corrcoef(a, b) # Calculate and return the correlation
+        
 
     def visualize_graph(self, weight_multiplier=10):
         G = nx.Graph()
@@ -95,7 +80,6 @@ class ResponseItemNetwork:
             if node == self.POLITCAL_BELIEF_COLUMN:
                 continue
 
-            # Add the node to the graph
             G.add_node(node, label=node)
 
             # Calculate the political mean belief in order to color each question node
@@ -137,20 +121,18 @@ class ResponseItemNetwork:
         # plt.ylim([mm, MM])
         plt.show()
 
+
     def get_mean_political_belief(self, feature_node, political_beliefs: pd.Series):
         opinion = self.df[feature_node]
         mean_belief = np.mean(political_beliefs[opinion > 0])  # Avoid division by 0 for missing answers
         return mean_belief
 
-   # Map each question's political belief mean to a color
+   # Map each question's political belief mean to a color,                                                                                        
     def political_belief_to_color(self, mean_belief, belief_scale=9):
         # Normalize the mean political belief to [0, 1] to create a color gradient
+        custom_cmap = plt.get_cmap("seismic")
         norm_belief = (mean_belief - 1) / belief_scale  # Normalize to [0, 1] (1 = left, 10 = right)
-        norm_belief = np.clip(norm_belief, 0, 1)
-
-        # Use a colormap (coolwarm from blue to red) to create the final color
-        cmap = plt.get_cmap("coolwarm")
-        return cmap(norm_belief)  # Map the normalized value to the color
+        return custom_cmap(norm_belief)  # Map the normalized value to the color
 
 
     def extract_positions(self, pos):
