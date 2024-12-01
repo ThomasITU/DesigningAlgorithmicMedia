@@ -3,56 +3,65 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from sklearn.metrics import matthews_corrcoef
+from sklearn.decomposition import PCA
 
 class ResponseItemNetwork:
 
-    WEIGHT_MULTIPLIER = 50
-    def __init__(self, df):
+    def __init__(self, df: pd.DataFrame, question_mapping: dict[str, tuple[str, int]]):
+        self.question_mapping = question_mapping # {question key (X99): [question name, range of possible_answers (int)}
         self.df = self.binarize_df(df)
         self.nodes = list(self.df.columns)
         self.edges = {}
         self.build_graph()
 
     def build_graph(self):
-        original_node = None
-        duplicate_node = None
+        # Create a unique list of nodes (ensure no duplicates)
+        seen_nodes = set()  # To track questions we already processed
+
         for i in range(len(self.nodes)):
             for j in range(i + 1, len(self.nodes)):
                 node_a, node_b = self.nodes[i], self.nodes[j]
-                correlation = self.calculate_correlation(node_a, node_b)
-                if correlation > 0:  # Only add positive associations from the paper
-                    # print(f"Adding edge between {node_a} and {node_b} with correlation {correlation}")
-                    self.add_edge(node_a, node_b, correlation * self.WEIGHT_MULTIPLIER)
-                    if duplicate_node is None:
-                        duplicate_node = node_a
-                        original_node = node_a
-        self.nodes.append(duplicate_node+"_dup")
-        correlation_dub = self.calculate_correlation(original_node, duplicate_node)
-        self.add_edge(original_node, duplicate_node+"_dup", correlation_dub * self.WEIGHT_MULTIPLIER)
-        print(f"Adding edge between {original_node} and {duplicate_node}_dup with correlation {correlation_dub}")
+                
+                # Skip nodes that are the same question (using the first part of the name before the '_')
+                if node_a.split('_')[0] == node_b.split('_')[0]:
+                    continue
+
+                # Skip if we've already processed this pair
+                if (node_a, node_b) in seen_nodes or (node_b, node_a) in seen_nodes:
+                    continue
+
+                # Track the pair to avoid redundant processing
+                seen_nodes.add((node_a, node_b))
+
+                # Calculate correlation between node_a and node_b
+                try:
+                    correlation = self.calculate_correlation(node_a, node_b)
+                    if correlation > 0:  # Only add positive associations from the paper
+                        print(f"Adding edge between {node_a} and {node_b} with correlation {correlation}")
+                        self.add_edge(node_a, node_b, correlation)
+                except ValueError as e:
+                    print(f"Error calculating correlation between {node_a} and {node_b}: {e}")
+
+
 
     def binarize_df(self, df):
         # Create an empty DataFrame to store results
         binarized = pd.DataFrame(index=df.index)
-        
-        # Process each column individually
-        for col in df.columns:
-            # Get min and max values for this column
-            min_val = df[col].min()
-            max_val = df[col].max()
+
+        for key, (question, possible_answers) in self.question_mapping.items():
+            # Create a single binary row per respondent for all possible answers
+            binarized_answers = pd.get_dummies(df[key], prefix=question)
             
-            # Create new column name
-            new_col = f"{col}"
-            
-            # Create binarized values
-            binarized[new_col] = pd.Series(
-                np.where(df[col] == min_val, 0,
-                        np.where(df[col] == max_val, 1, -1)),
-                index=df.index
-            )
-        
+            # Add missing possible answers as columns with all zeros (if necessary)
+            for answer in range(1, possible_answers + 1):
+                column_name = f"{question}_{answer}"
+                if column_name not in binarized_answers:
+                    binarized_answers[column_name] = 0
+
+            # Concatenate the binarized answers for this question to the result
+            binarized = pd.concat([binarized, binarized_answers], axis=1)
+
         return binarized
-        
 
     def add_edge(self, source, target, weight=0):
         # Construct edge_id using source and target to uniquely identify edges
@@ -63,7 +72,9 @@ class ResponseItemNetwork:
     def calculate_correlation(self, node_a, node_b):
         # Filter rows where both node_a and node_b have non-negative values
         filtered_df = self.df[(self.df[node_a] >= 0) & (self.df[node_b] >= 0)]
-
+        if len(filtered_df) == 0:
+            return 0
+        
         # Create binary arrays indicating presence based on the filtered rows
         a = np.array([int(val > 0) for val in filtered_df[node_a]])
         b = np.array([int(val > 0) for val in filtered_df[node_b]])
@@ -73,10 +84,14 @@ class ResponseItemNetwork:
 
     
     @staticmethod
-    def visualize_graph(ResIN, question_mapping, node_partisan_data, show_edges, weight_multiplier=50):
+    def visualize_graph(ResIN, question_mapping, node_partisan_data, show_edges, weight_multiplier=10):
+        pca = PCA(n_components=2)
         G = nx.Graph()
 
         for node in ResIN.nodes:
+            if question_mapping is None or node not in question_mapping:
+                G.add_node(node, label=node)
+                continue
             label = question_mapping.get(node, node)
             # partisan_score = node_partisan_data.get(node, 4)  # Default to a neutral score if absent
             G.add_node(node, label=label) #, partisan=partisan_score)
@@ -85,11 +100,19 @@ class ResponseItemNetwork:
         for edge in ResIN.edges.values():
             G.add_edge(edge['source'], edge['target'], weight=edge['weight'])
 
-        pos = nx.spring_layout(G, seed=42)
-        nx.draw_networkx_nodes(G, pos, node_size=20, cmap=plt.cm.coolwarm)# node_color=colors
+        pos = nx.spring_layout(G, iterations=5000)
+        positions = ResponseItemNetwork.extract_positions(pos)
+        # pca.fit(positions)
+        # x_pca = pca.transform(positions)
+        # xx = x_pca[:, 0]
+        # yy = x_pca[:, 1]
+
+        # mm = min(xx)*1.1
+        # MM = max(xx)*1.1
+        nx.draw_networkx_nodes(G, pos, node_size=30, cmap=plt.cm.coolwarm)# node_color=colors
 
         node_labels = {node: data['label'] for node, data in G.nodes(data=True)}
-        nx.draw_networkx_labels(G, pos, labels=node_labels, font_size=8, font_weight='bold')
+        nx.draw_networkx_labels(G, pos, labels=node_labels, font_size=5)
 
 
         edges = G.edges()
@@ -106,6 +129,25 @@ class ResponseItemNetwork:
         # plt.colorbar(sm, label="Partisan Leaning")
 
         plt.title("Response Item Network")
-        plt.axis('off')
+        # plt.axis('off')
+        # plt.xlim([mm, MM])
+        # plt.ylim([mm, MM])
+
         plt.show()
 
+    @staticmethod
+    def extract_positions(pos):
+        # based on the original Respondent network 
+        # https://github.com/just-a-normal-dino/AS22_analysis_RESIN/blob/main/graded_model_full.ipynb
+        pos2 = [[],[]]
+        key_list = []
+        for key in pos:
+            pos2[0].append(pos[key][0])
+            pos2[1].append(pos[key][1])
+            key_list.append(key)
+
+        pos3 = []
+        for key in pos:
+            pos3.append([pos[key][0],pos[key][1]])
+
+        return pos3
