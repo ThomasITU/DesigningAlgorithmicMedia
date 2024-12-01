@@ -81,10 +81,10 @@ class ResponseItemNetwork:
                 continue
 
             # Calculate the political mean belief in order to color each question node
+            mean_belief = 0
             if not partisan_column.empty:
                 mean_belief = self.get_mean_political_belief(node, partisan_column)
                 node_colors.append(self.political_belief_to_color(mean_belief))
-            
             G.add_node(node, label=node, leaning=mean_belief)
 
 
@@ -95,23 +95,24 @@ class ResponseItemNetwork:
         # Calculate the positions of the nodes using force-directed layout
         positions = nx.spring_layout(G, iterations=5000)
 
-        # rotate and scale the positions
-        rotated_positions = self.extract_positions(positions, G)
+        # rotate positions to align political leaning left -> right
+        if sum([G.nodes[node]["leaning"] for node in G.nodes]) > 0:
+            positions = self.extract_positions(positions, G)
 
         # draw nodes
         node_labels = {node: data.get('label', node) for node, data in G.nodes(data=True)}
-        nx.draw_networkx_nodes(G, rotated_positions, node_size=300, node_color=node_colors)
-        nx.draw_networkx_labels(G, rotated_positions, labels=node_labels, font_size=8)
+        nx.draw_networkx_nodes(G, positions, node_size=300, node_color=node_colors)
+        nx.draw_networkx_labels(G, positions, labels=node_labels, font_size=8)
 
         # draw edges
         edges = G.edges()
         weights = [G[u][v]['weight'] for u, v in edges]
-        nx.draw_networkx_edges(G, rotated_positions, width=[w * weight_multiplier for w in weights], edge_color='gray')
+        nx.draw_networkx_edges(G, positions, width=[w * weight_multiplier for w in weights], edge_color='gray')
 
         plt.title("Response Item Network")
         plt.show()
 
-
+    # 1 = left, 10 = right
     def get_mean_political_belief(self, feature_node, political_beliefs: pd.Series):
         opinion = self.df[feature_node]
         mean_belief = np.mean(political_beliefs[opinion > 0])  # Avoid division by 0 for missing answers
@@ -132,19 +133,30 @@ class ResponseItemNetwork:
         pca = PCA(n_components=2)
         rotated_positions = pca.fit_transform(positions)
 
+        # Ensure "left-leaning" nodes are on the left side of the plot
+        leaning_values = [G.nodes[node]["leaning"] for node in G.nodes]
+        left_indices = [i for i, val in enumerate(leaning_values) if val < 5]
+        right_indices = [i for i, val in enumerate(leaning_values) if val > 5]        
+
         # Extract x-coordinates and node leaning
         x_coords = rotated_positions[:, 0]
-        leaning = [G.nodes[node]["leaning"] for node in G.nodes]
-
-        # Ensure "left-leaning" nodes are on the left side
-        left_indices = [i for i, l in enumerate(leaning) if l == "left"]
-        right_indices = [i for i, l in enumerate(leaning) if l == "right"]
+        y_coords = rotated_positions[:, 1]
 
         # Check average x-coordinates
-        avg_left_x = np.mean(x_coords[left_indices])
-        avg_right_x = np.mean(x_coords[right_indices])
+        avg_left_x = np.mean([x_coords[i] for i in left_indices])
+        avg_right_x = np.mean([x_coords[i] for i in right_indices])
+
+        # Calculate average y-coordinates for left and right nodes
+        avg_left_y = np.mean([y_coords[i] for i in left_indices])
+        avg_right_y = np.mean([y_coords[i] for i in right_indices])
 
         # Flip x-axis if necessary
         if avg_left_x > avg_right_x:
             rotated_positions[:, 0] = -rotated_positions[:, 0]
-        return rotated_positions
+
+        # Flip y-axis if necessary try to lock the y-axis such that it does not flip
+        if avg_left_y < avg_right_y:
+            rotated_positions[:, 1] = -rotated_positions[:, 1]  
+
+        rotated_pos = {node: rotated_positions[i] for i, node in enumerate(G.nodes)}
+        return rotated_pos
