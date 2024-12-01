@@ -80,45 +80,35 @@ class ResponseItemNetwork:
             if node == self.POLITCAL_BELIEF_COLUMN:
                 continue
 
-            G.add_node(node, label=node)
-
             # Calculate the political mean belief in order to color each question node
             if not partisan_column.empty:
                 mean_belief = self.get_mean_political_belief(node, partisan_column)
                 node_colors.append(self.political_belief_to_color(mean_belief))
+            
+            G.add_node(node, label=node, leaning=mean_belief)
+
 
         # Add edges to the graph
         for edge in self.edges.values():
             G.add_edge(edge['source'], edge['target'], weight=edge['weight'])
 
         # Calculate the positions of the nodes using force-directed layout
-        pos = nx.spring_layout(G, iterations=5000)
+        positions = nx.spring_layout(G, iterations=5000)
 
         # rotate and scale the positions
-        # positions = self.extract_positions(pos)
-        # pca = PCA(n_components=2)
-        # pca.fit(positions)
-        # x_pca = pca.transform(positions)
-        # xx = x_pca[:, 0]
-        # yy = x_pca[:, 1]
-
-        # mm = min(xx)*1.1
-        # MM = max(xx)*1.1
+        rotated_positions = self.extract_positions(positions, G)
 
         # draw nodes
         node_labels = {node: data.get('label', node) for node, data in G.nodes(data=True)}
-        nx.draw_networkx_nodes(G, pos, node_size=300, node_color=node_colors)
-        nx.draw_networkx_labels(G, pos, labels=node_labels, font_size=8)
+        nx.draw_networkx_nodes(G, rotated_positions, node_size=300, node_color=node_colors)
+        nx.draw_networkx_labels(G, rotated_positions, labels=node_labels, font_size=8)
 
         # draw edges
         edges = G.edges()
         weights = [G[u][v]['weight'] for u, v in edges]
-        nx.draw_networkx_edges(G, pos, width=[w * weight_multiplier for w in weights], edge_color='gray')
+        nx.draw_networkx_edges(G, rotated_positions, width=[w * weight_multiplier for w in weights], edge_color='gray')
 
         plt.title("Response Item Network")
-        # plt.axis('off')
-        # plt.xlim([mm, MM])
-        # plt.ylim([mm, MM])
         plt.show()
 
 
@@ -135,18 +125,26 @@ class ResponseItemNetwork:
         return custom_cmap(norm_belief)  # Map the normalized value to the color
 
 
-    def extract_positions(self, pos):
+    def extract_positions(self, pos, G: nx.Graph):
         # based on the original Respondent network 
         # https://github.com/just-a-normal-dino/AS22_analysis_RESIN/blob/main/graded_model_full.ipynb
-        pos2 = [[],[]]
-        key_list = []
-        for key in pos:
-            pos2[0].append(pos[key][0])
-            pos2[1].append(pos[key][1])
-            key_list.append(key)
+        positions = np.array([list(pos[node]) for node in G.nodes]) 
+        pca = PCA(n_components=2)
+        rotated_positions = pca.fit_transform(positions)
 
-        pos3 = []
-        for key in pos:
-            pos3.append([pos[key][0],pos[key][1]])
+        # Extract x-coordinates and node leaning
+        x_coords = rotated_positions[:, 0]
+        leaning = [G.nodes[node]["leaning"] for node in G.nodes]
 
-        return pos3
+        # Ensure "left-leaning" nodes are on the left side
+        left_indices = [i for i, l in enumerate(leaning) if l == "left"]
+        right_indices = [i for i, l in enumerate(leaning) if l == "right"]
+
+        # Check average x-coordinates
+        avg_left_x = np.mean(x_coords[left_indices])
+        avg_right_x = np.mean(x_coords[right_indices])
+
+        # Flip x-axis if necessary
+        if avg_left_x > avg_right_x:
+            rotated_positions[:, 0] = -rotated_positions[:, 0]
+        return rotated_positions
