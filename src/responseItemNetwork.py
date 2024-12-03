@@ -10,6 +10,7 @@ class ResponseItemNetwork:
 
     CMAP = plt.get_cmap("seismic")
     POLITCAL_BELIEF_COLUMN = 'resin_political_beliefs'
+
     def __init__(self, df: pd.DataFrame, question_mapping: dict[str, tuple[str, int, bool]], political_belief_column: str | None):
         self.question_mapping = question_mapping # {question key (X99): [question name, range of possible_answers (int), is_inverted}
         self.df = self.binarize_df(df, political_belief_column)
@@ -17,6 +18,9 @@ class ResponseItemNetwork:
         self.edges = {}
         self.build_graph()
 
+    # This function builds a graph by iterating through pairs of nodes, calculating their correlation,
+    # and adding an edge between them if the correlation is positive. It avoids processing nodes
+    # multiple times using the `seen_nodes` set and the `skip_seen_nodes` method.
     def build_graph(self):
         seen_nodes = set()
 
@@ -27,7 +31,7 @@ class ResponseItemNetwork:
                     continue
 
                 # Calculate correlation and add edge if positive based on the paper
-                correlation = self.calculate_correlation(node_a, node_b)
+                correlation = self.calculate_phi_correlation(node_a, node_b)
                 if correlation > 0:
                     self.add_edge(node_a, node_b, correlation)
 
@@ -44,6 +48,9 @@ class ResponseItemNetwork:
             seen_nodes.add((node_a, node_b)) 
             return False
 
+    # This function binarizes a DataFrame by converting each answer in the specified questions to binary columns,
+    # where each column represents whether a particular belief level was selected. It also handles optional
+    # inversion of question mappings and adds a column for political beliefs if provided.
     def binarize_df(self, df, political_belief_column):
         binarized = pd.DataFrame(index=df.index)
         if political_belief_column:
@@ -57,16 +64,22 @@ class ResponseItemNetwork:
                 binarized[column_name] = (df[key] == answer).astype(int) # Add a 1 if the belief is held at the "answer" level , otherwise 0
        
         return binarized
-    
+
+    # This function inverts the values in a column based on the provided max scale,
+    # transforming each value to its corresponding inverse (e.g., 1 becomes max_scale, max_scale becomes 1).
     def invert_question_mapping(self, max_scale, column_data):
         column_data.apply(lambda x: (max_scale + 1) - x)
 
+    # This function adds an edge between two nodes (source and target) with a specified weight,
+    # and uniquely identifies the edge using a constructed edge_id.
     def add_edge(self, source, target, weight=0):
         # Construct edge_id using source and target to uniquely identify edges
         edge_id = f"{source}_{target}"
         self.edges[edge_id] = {'source': source, 'target': target, 'weight': weight}
 
-    def calculate_correlation(self, node_a, node_b):
+    # This function calculates the Pearson correlation coefficient (phi correlation) between two nodes (node_a and node_b)
+    # by filtering rows with non-negative values, converting the values to binary, and then computing the correlation.
+    def calculate_phi_correlation(self, node_a, node_b):
         # Filter rows where both node_a and node_b have non-negative values
         filtered_df = self.df[(self.df[node_a] >= 0) & (self.df[node_b] >= 0)]
 
@@ -76,16 +89,25 @@ class ResponseItemNetwork:
         
         # Calculate and return the correlation
         corr, _ = pearsonr(a, b)
-        return  corr 
-    
+        return  corr
+
+    # This function calculates the linearization score for the network based on the positions of the nodes.
+    # It computes the ratio of the range of x-positions to the range of y-positions, providing a measure
+    # of how "linear" the network is based on the given coordinates. (1: perfectly linear; 0 not linear)
     def linearization_score(self, positions):
         # Calculate the linearization score for the network based on the paper
         x_positions = [coord[0] for coord in positions.values()]
         y_positions = [coord[1] for coord in positions.values()]
 
         linearization_score = (max(x_positions) - min(x_positions)) / (max(y_positions) - min(y_positions))
-        return linearization_score 
+        return linearization_score
 
+    # This function visualizes a graph representation of a network, where nodes are linked based on the edges
+    # and their color is determined by the mean political belief of each node. It uses a force-directed layout
+    # to arrange the nodes, then colors them according to their political leaning. The function also calculates
+    # and prints the linearization score of the network's layout before rotation and adjusts the layout to align
+    # political leanings if necessary. Finally, it draws the nodes, edges, and a color bar indicating the mean
+    # political belief of the nodes, with optional node labels.
     def visualize_graph(self, show_node_labels=True):
         G = nx.Graph()
         
@@ -140,19 +162,26 @@ class ResponseItemNetwork:
         plt.title("Response Item Network")
         plt.show()
 
-    # 1 = left, 10 = right
+    # This function calculates the mean political belief for a given feature node based on the associated opinions.
+    # It filters the `political_beliefs` series to include only rows where the corresponding `feature_node` opinion is greater than 0,
+    # and then computes the average political belief for those rows. The scale is assumed to range from 1 (left) to 10 (right).
     def get_mean_political_belief(self, feature_node, political_beliefs: pd.Series):
         opinion = self.df[feature_node]
         mean_belief = np.mean(political_beliefs[opinion > 0])
         return mean_belief
 
-   # Map each question's political belief mean to a color,                                                                                        
+    # This function converts a mean political belief value to a color based on a gradient.
+    # It normalizes the belief value to a [0, 1] range (where 1 = left and 10 = right) and then maps the normalized value
+    # to a color using the specified color map (CMAP).
     def political_belief_to_color(self, mean_belief, belief_scale=9):
         # Normalize the mean political belief to [0, 1] to create a color gradient
         norm_belief = (mean_belief - 1) / belief_scale  # Normalize to [0, 1] (1 = left, 10 = right)
         return self.CMAP(norm_belief)  # Map the normalized value to the color
 
-
+    # This function aligns the positions of nodes in the graph to ensure that "left-leaning" nodes are on the left side
+    # and "right-leaning" nodes are on the right side of the plot. It uses Principal Component Analysis (PCA) to rotate
+    # the positions of the nodes and then checks the average x- and y-coordinates for left- and right-leaning nodes.
+    # If necessary, it flips the x- or y-axis to ensure the correct alignment of the nodes according to their political leanings.
     def lock_alignment(self, pos, G: nx.Graph):
         # based on the original Respondent network 
         # https://github.com/just-a-normal-dino/AS22_analysis_RESIN/blob/main/graded_model_full.ipynb
@@ -187,7 +216,11 @@ class ResponseItemNetwork:
 
         rotated_pos = {node: rotated_positions[i] for i, node in enumerate(G.nodes)}
         return rotated_pos
-    
+
+    # This function performs a varimax rotation on the positions of nodes in the graph to align the principal components
+    # with the axes. It first applies PCA to the scaled positions, then rotates the coordinates to align the first
+    # principal component with the x-axis. After rotation, it ensures that "left-leaning" nodes are positioned on the
+    # left side and "right-leaning" nodes are on the right. The final adjusted positions are mapped back to the graph.
     def varimax_rotation(self, pos, G: nx.Graph):
         # based on the original Respondent network 
         scaler = StandardScaler()
