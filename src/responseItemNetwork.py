@@ -58,7 +58,7 @@ class ResponseItemNetwork:
 
         for key, (question, belief_spectrum, is_inverted) in self.question_mapping.items(): 
             if is_inverted:
-                df[key] = self.invert_question_mapping(belief_spectrum, df[key])
+                df = self.invert_question_mapping(belief_spectrum, df, key)
             for answer in range(1, belief_spectrum + 1): # iterate over the possible range of answers to a question
                 column_name = f"{question}_{answer}" # Create a column name for the belief e.g. belief_1, belief_2, etc 
                 binarized[column_name] = (df[key] == answer).astype(int) # Add a 1 if the belief is held at the "answer" level , otherwise 0
@@ -67,9 +67,9 @@ class ResponseItemNetwork:
 
     # This function inverts the values in a column based on the provided max scale,
     # transforming each value to its corresponding inverse (e.g., 1 becomes max_scale, max_scale becomes 1).
-    def invert_question_mapping(self, max_scale, column_data):
-        column_data.apply(lambda x: (max_scale + 1) - x)
-
+    def invert_question_mapping(self, max_scale,df, column_data):
+        df[column_data] = df[column_data].apply(lambda x: (max_scale + 1) - x)
+        return df
     # This function adds an edge between two nodes (source and target) with a specified weight,
     # and uniquely identifies the edge using a constructed edge_id.
     def add_edge(self, source, target, weight=0):
