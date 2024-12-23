@@ -68,7 +68,7 @@ class ResponseItemNetwork:
     # This function inverts the values in a column based on the provided max scale,
     # transforming each value to its corresponding inverse (e.g., 1 becomes max_scale, max_scale becomes 1).
     def invert_question_mapping(self, max_scale,df, column_data):
-        df[column_data] = df[column_data].apply(lambda x: (max_scale + 1) - x)
+        df[column_data] = df[column_data].apply(lambda x: (max_scale + 1) - x if pd.notnull(x) else x)
         return df
     # This function adds an edge between two nodes (source and target) with a specified weight,
     # and uniquely identifies the edge using a constructed edge_id.
